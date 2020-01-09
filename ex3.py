@@ -8,7 +8,7 @@ import numpy as np
 #   at the words)
 # clusters_word_probabilities - array, i-th place has a map from words to their probabilities conditioned on cluster i
 # yt - the th document (a counter over the document words)
-def calc_wti(i, clusters_probabilities, clusters_word_probabilities, yt):
+def calc_wti(i, yt, clusters_probabilities, clusters_word_probabilities):
     n = len(clusters_probabilities)
     alpha_i = clusters_probabilities[i]
     document_piks = [pow(clusters_word_probabilities[i][word], cnt) for word, cnt in yt.most_common()]
@@ -26,8 +26,8 @@ def calc_wti(i, clusters_probabilities, clusters_word_probabilities, yt):
 # returns a list of size N (the number of documents), each list element represents the probability distribution over
 # the clusters, so list of lists
 def e_step(documents, clusters_probabilities, clusters_word_probabilities):
-    result = [calc_wti(t, clusters_probabilities, clusters_word_probabilities, doc) for t, doc in documents.items()]
-    return result
+    return [[calc_wti(i, doc, clusters_probabilities, clusters_word_probabilities) for i in range(len(clusters_probabilities))]
+            for doc in documents]
 
 
 def calc_ai(cluster_idx, wts):
@@ -39,13 +39,16 @@ def calc_ai(cluster_idx, wts):
 # cluster_idx - the cluster # (0-8)
 # documents - list of counters (with word frequencies for each document)
 def calc_pik(word_k, cluster_idx, wts, documents):
-    numerator = np.sum([wts[t][cluster_idx]*document[word_k] for t, document in documents.items()])
-    denominator = np.sum([wts[t][cluster_idx]*sum(document.values()) for t, document in documents.items()])
+    numerator = np.sum([wts[t][cluster_idx]*document[word_k] for t, document in enumerate(documents)])
+    denominator = np.sum([wts[t][cluster_idx]*sum(document.values()) for t, document in enumerate(documents)])
     return numerator / denominator
 
 
-def m_step():
-    pass
+def m_step(wts, documents, vocab):
+    cluster_count = len(wts[0])
+    clusters_probabilities = [calc_ai(cluster_idx, wts) for cluster_idx in range(cluster_count)]
+    clusters_word_probabilities = [{word_k: calc_pik(word_k, cluster_idx, wts, documents) for word_k in vocab} for cluster_idx in range(cluster_count)]
+    return clusters_probabilities, clusters_word_probabilities
 
 
 def load_input(input_filename):
