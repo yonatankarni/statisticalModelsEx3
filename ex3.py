@@ -1,4 +1,5 @@
 from collections import Counter
+from time import time
 import numpy as np
 
 
@@ -11,12 +12,12 @@ import numpy as np
 def calc_wti(i, yt, clusters_probabilities, clusters_word_probabilities):
     n = len(clusters_probabilities)
     alpha_i = clusters_probabilities[i]
-    document_piks = [pow(clusters_word_probabilities[i][word], cnt) for word, cnt in yt.most_common()]
+    document_piks = [pow(clusters_word_probabilities[word][i], cnt) for word, cnt in yt.most_common()]
     numerator = alpha_i * np.prod(document_piks)
     denom_list = np.zeros(n)
     for j in range(n):
         alpha_j = clusters_probabilities[j]
-        cluster_document_piks = [pow(clusters_word_probabilities[j][word], cnt) for word, cnt in yt.most_common()]
+        cluster_document_piks = [pow(clusters_word_probabilities[word][j], cnt) for word, cnt in yt.most_common()]
         denom_list[j] = alpha_j * np.prod(cluster_document_piks)
     denominator = np.sum(denom_list)
 
@@ -47,7 +48,8 @@ def calc_pik(word_k, cluster_idx, wts, documents):
 def m_step(wts, documents, vocab):
     cluster_count = len(wts[0])
     clusters_probabilities = [calc_ai(cluster_idx, wts) for cluster_idx in range(cluster_count)]
-    clusters_word_probabilities = [{word_k: calc_pik(word_k, cluster_idx, wts, documents) for word_k in vocab} for cluster_idx in range(cluster_count)]
+
+    clusters_word_probabilities = {word_k: [calc_pik(word_k, cluster_idx, wts, documents) for cluster_idx in range(cluster_count)] for word_k in vocab}
     return clusters_probabilities, clusters_word_probabilities
 
 
@@ -55,14 +57,27 @@ def load_input(input_filename):
     with open(input_filename, 'r') as development_set_file:
         lines = development_set_file.readlines()
 
-    zipped = zip(lines[0::2], lines[1::2])
+    vocab = Counter([word for line in lines[1::2] for word in line.strip().split(" ")]).keys()
 
-    res = map(lambda x: (x[0], x[1].strip().split(" "), Counter(x[1].strip().split(" "))), zipped)
+    zipped = list(zip(lines[0::2], lines[1::2]))
 
-    return res
+    documents_info = list(map(lambda x: (x[0], x[1].strip().split(" "), Counter(x[1].strip().split(" "))), zipped))
+    return documents_info, vocab
 
 
 if __name__ == "__main__":
-    res = load_input("dataset/develop.txt")
+    documents_info, vocab = load_input("dataset/develop.txt")
 
-    print(res[0])
+    documents = list(map(lambda x: x[2], documents_info))
+
+    # initialize - fake e step where each document gets a cluster by calculating the document index modulo 9
+    EYE = np.eye(9)
+    wts = [EYE[t % 9] for t in range(len(documents))]
+
+    # for i in range(1):
+    start_time = time()
+
+    clusters_probabilities, clusters_word_probabilities = m_step(wts, documents, vocab)
+    wts = e_step(documents, clusters_probabilities, clusters_word_probabilities)
+
+    print("run took " + str((time() - start_time)) + " seconds")

@@ -30,7 +30,7 @@ assert 0.99999 < a0 + a1 < 1.00001
 # test e-step
 clusters_probabilities = [1/9. for x in range(2)]
 
-wts = e_step(documents, clusters_probabilities, clusters_word_probabilities)\
+wts = e_step(documents, clusters_probabilities, clusters_word_probabilities)
 
 vocab = ["aaa", "bbb", "ccc"]
 clusters_probabilities, clusters_word_probabilities = m_step(wts, documents, vocab)
