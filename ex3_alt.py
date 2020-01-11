@@ -130,7 +130,9 @@ class HistogramMixtureEM:
         pass
     
     def compute_alpha(self):
-        self.alpha = np.sum(self.p, axis=0) / len(self.articles)
+        not_stable_alpha = np.sum(self.p, axis=0) / len(self.articles)
+        stable_alpha = not_stable_alpha / np.sum(not_stable_alpha)
+        self.alpha = stable_alpha
     
     def compute_p(self):
         pass
