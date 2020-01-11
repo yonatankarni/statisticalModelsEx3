@@ -12,34 +12,46 @@ pik_lambda = 1e-10
 # i: cluster index (0..8)
 # clusters_probabilities - array, i-th place has the probability of a document belonging to cluster i (before we look
 #   at the words)
-# clusters_word_probabilities - array, i-th place has a map from words to their probabilities conditioned on cluster i
+# words_clusters_probabilities - array, i-th place has a map from words to their probabilities conditioned on cluster i
 # yt - the th document (a counter over the document words)
-def calc_wti(i, yt, clusters_probabilities, clusters_word_probabilities):
-    n = len(clusters_probabilities)
-
-    z_values = np.zeros(n)
-    for j in range(n):
-        alpha_j = clusters_probabilities[j]
-        zj = np.log(alpha_j) + np.sum([nt_k * np.log(clusters_word_probabilities[word][j]) for word, nt_k in yt.most_common()])
-        z_values[j] = zj
-
-    m = np.amax(z_values)
-
+def calc_wti(i, m, z_values):
     if z_values[i] - m < -underflow_k:
         return 0
     else:
-        denom_valid_zjs = filter(lambda zj: zj - m >= -underflow_k, z_values)
-        denom_list = list(map(lambda zj: np.power(np.e, zj - m), denom_valid_zjs))
-        denominator = np.sum(denom_list)
+        denominator = calc_sum_of_e_power_of_zi(z_values, m)
         numerator = np.power(np.e, z_values[i] - m)
         return numerator / denominator
 
 
+def calc_sum_of_e_power_of_zi(z_values, m):
+    denom_valid_zjs = filter(lambda zj: zj - m >= -underflow_k, z_values)
+    denom_list = list(map(lambda zj: np.power(np.e, zj - m), denom_valid_zjs))
+    denominator = np.sum(denom_list)
+    return denominator
+
+
+def calc_zis(yt, clusters_probabilities, words_clusters_probabilities):
+    n = len(clusters_probabilities)
+    z_values = np.zeros(n)
+    for j in range(n):
+        alpha_j = clusters_probabilities[j]
+        zj = np.log(alpha_j) + np.sum(
+            [nt_k * np.log(words_clusters_probabilities[word][j]) for word, nt_k in yt.most_common()])
+        z_values[j] = zj
+
+    m = np.amax(z_values)
+    return z_values, m
+
+
+def calc_doc_wtis(yt, clusters_probabilities, words_clusters_probabilities):
+    z_values, m = calc_zis(yt, clusters_probabilities, words_clusters_probabilities)
+    return np.array([calc_wti(i, m, z_values) for i in range(len(clusters_probabilities))])
+
+
 # returns a list of size N (the number of documents), each list element represents the probability distribution over
 # the clusters, so list of lists
-def e_step(documents, clusters_probabilities, clusters_word_probabilities):
-    return [np.array([calc_wti(i, doc, clusters_probabilities, clusters_word_probabilities) for i in range(len(clusters_probabilities))])
-            for doc in documents]
+def e_step(documents, clusters_probabilities, words_clusters_probabilities):
+    return [calc_doc_wtis(yt, clusters_probabilities, words_clusters_probabilities) for yt in documents]
 
 
 def calc_ai(cluster_idx, wts):
@@ -64,11 +76,13 @@ def m_step(wts, documents, vocab, vocab_size):
     smoothed_clusters_probabilities = clusters_probabilities_with_epsilon_threshold / clusters_probabilities_sum
 
     pik_cluster_denominators = np.array([np.sum([wts[t][cluster_idx] * sum(document.values()) for t, document in enumerate(documents)]) for cluster_idx in range(cluster_count)])
-    # clusters_word_probabilities = [(word_k, np.array(
-    #     [calc_pik(word_k, cluster_idx, wts, pik_cluster_denominators, documents, vocab_size) for cluster_idx in
-    #      range(cluster_count)])) for word_k in vocab]
-    clusters_word_probabilities = {word_k: np.array([calc_pik(word_k, cluster_idx, wts, pik_cluster_denominators, documents, vocab_size) for cluster_idx in range(cluster_count)]) for word_k in vocab}
-    return smoothed_clusters_probabilities, clusters_word_probabilities
+    words_clusters_probabilities = {word_k: np.array([calc_pik(word_k, cluster_idx, wts, pik_cluster_denominators, documents, vocab_size) for cluster_idx in range(cluster_count)]) for word_k in vocab}
+    return smoothed_clusters_probabilities, words_clusters_probabilities
+
+
+def log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities):
+    zits = [calc_zis(yt, clusters_probabilities, words_clusters_probabilities) for yt in documents]
+    return sum([zit[1] + np.log(calc_sum_of_e_power_of_zi(zit[0], zit[1])) for zit in zits])
 
 
 def load_input(input_filename):
@@ -95,10 +109,11 @@ if __name__ == "__main__":
     wts = [EYE[t % 9] for t in range(len(documents))]
 
     vocab_size = len(vocab)
-    # for i in range(1):
-    start_time = time()
+    for i in range(10):
+        start_time = time()
 
-    clusters_probabilities, clusters_word_probabilities = m_step(wts, documents, vocab, vocab_size)
-    wts = e_step(documents, clusters_probabilities, clusters_word_probabilities)
+        clusters_probabilities, words_clusters_probabilities = m_step(wts, documents, vocab, vocab_size)
+        wts = e_step(documents, clusters_probabilities, words_clusters_probabilities)
 
-    print("run took " + str((time() - start_time)) + " seconds")
+        print(log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities))
+        print("took " + str((time() - start_time)) + " seconds")
