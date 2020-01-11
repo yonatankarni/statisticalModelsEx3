@@ -86,10 +86,11 @@ class Parser:
 
 class HistogramMixtureEM:
     
-    def __init__(self, articles, dictionary, num_of_clusters):
+    def __init__(self, articles, dictionary, num_of_clusters, k=10):
         self.articles = articles
         self.word_to_idx = dict(zip(dictionary, itertools.count()))
         self.num_of_clusters = num_of_clusters
+        self.k = k
         self.alpha = None
         self.p = None
         self.clusters = HistogramMixtureEM.init_clusters(articles, num_of_clusters)
@@ -137,7 +138,12 @@ class HistogramMixtureEM:
     def compute_w(self):
         for t, doc in enumerate(self.articles):
             z = self.compute_z(doc)
-            self.w[t, :] = z / np.sum(z) 
+            m = np.max(z)
+            shifted_z = z - m
+            exp_z = np.exp(shifted_z)
+            treshold = np.exp(-self.k)
+            stable_exp = np.where(exp_z > treshold, exp_z, 0)
+            self.w[t, :] = stable_exp/np.sum(stable_exp) 
     
     def compute_z(self, doc):
         z = np.zeros_like(self.alpha)
