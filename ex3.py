@@ -5,8 +5,8 @@ import numpy as np
 
 
 underflow_k = 10
-epsilon = 1e-10
-pik_lambda = 1e-10
+epsilon = 1e-6
+pik_lambda = 4*1e-1
 
 
 # calc_wti: calculate the probability for cluster i given doc t
@@ -25,8 +25,8 @@ def calc_wti(i, m, z_values):
 
 
 def calc_sum_of_e_power_of_zi(z_values, m):
-    denom_valid_zjs = filter(lambda zj: zj - m >= -underflow_k, z_values)
-    denom_list = list(map(lambda zj: np.power(np.e, zj - m), denom_valid_zjs))
+    denom_valid_zjs = [zj for zj in z_values if zj - m >= -underflow_k]
+    denom_list = [np.power(np.e, zj - m) for zj in denom_valid_zjs]
     denominator = np.sum(denom_list)
     return denominator
 
@@ -86,15 +86,18 @@ def calc_log_likelyhood(documents, clusters_probabilities, words_clusters_probab
     return sum([zit[1] + np.log(calc_sum_of_e_power_of_zi(zit[0], zit[1])) for zit in zits])
 
 
+def get_vocabulary_words_in_line_counter(line, vocab):
+    return Counter([w for w in line.strip().split(" ") if w in vocab])
+
+
 def load_input(input_filename):
     with open(input_filename, 'r') as development_set_file:
         lines = development_set_file.readlines()
 
     vocab_counter = Counter([word for line in lines[1::2] for word in line.strip().split(" ")])
-    vocab = set(map(lambda p: p[0], filter(lambda x: x[1] > 3, vocab_counter.most_common())))
-    dataset_word_count = sum(map(lambda p: p[1], filter(lambda x: x[1] > 3, vocab_counter.most_common())))
-    documents_after_filtering = [Counter(list(filter(lambda w: w in vocab, line.strip().split(" ")))) for line in lines[1::2]]
-
+    vocab = set([p[0] for p in vocab_counter.most_common() if p[1] > 3])
+    dataset_word_count = sum([p[1] for p in vocab_counter.most_common() if p[1] > 3])
+    documents_after_filtering = [get_vocabulary_words_in_line_counter(line, vocab) for line in lines[1::2]]
     document_info = lines[0::2]
     documents_info = list(zip(document_info, documents_after_filtering))
 
@@ -125,7 +128,9 @@ def print_results(documents_info, wts):
 
 if __name__ == "__main__":
     documents_info, vocab, dataset_word_count = load_input("dataset/develop.txt")
-    documents = list(map(lambda x: x[1], documents_info))
+    documents = [x[1] for x in documents_info]
+
+    print("k: {}, epsilon: {}, lambda: {}".format(underflow_k, epsilon, pik_lambda))
 
     # initialize - fake e step where each document gets a cluster by calculating the document index modulo 9
     EYE = np.eye(9)
