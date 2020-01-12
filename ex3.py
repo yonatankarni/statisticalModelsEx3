@@ -90,6 +90,17 @@ def get_vocabulary_words_in_line_counter(line, vocab):
     return Counter([w for w in line.strip().split(" ") if w in vocab])
 
 
+def load_topics(topics_filename):
+    with open(topics_filename, 'r') as topics_file:
+        lines = topics_file.readlines()
+
+    result = dict()
+    for idx, topic in enumerate(lines):
+        result[topic.strip()] = idx
+
+    return result
+
+
 def load_input(input_filename):
     with open(input_filename, 'r') as development_set_file:
         lines = development_set_file.readlines()
@@ -98,7 +109,7 @@ def load_input(input_filename):
     vocab = set([p[0] for p in vocab_counter.most_common() if p[1] > 3])
     dataset_word_count = sum([p[1] for p in vocab_counter.most_common() if p[1] > 3])
     documents_after_filtering = [get_vocabulary_words_in_line_counter(line, vocab) for line in lines[1::2]]
-    document_info = lines[0::2]
+    document_info = [get_document_topics(line) for line in lines[0::2]]
     documents_info = list(zip(document_info, documents_after_filtering))
 
     return documents_info, vocab, dataset_word_count
@@ -108,25 +119,31 @@ pattern = re.compile(r'<TRAIN\s+(\d+)\s+((\w+-?\w+?\s*)+)>')
 
 
 def get_document_topics(header):
-    m = pattern.match(header)
-    if m:
-        return m.group(2).split()
-    else:
-        raise ValueError(header)
+    return pattern.match(header).group(2).split()
 
 
-def print_doc_result(document_info, wti):
-    document_topics = get_document_topics(document_info[0])
-    document_main_cluster = np.argmax(wti)
-    print("{},{}".format(document_main_cluster, ",".join(document_topics)))
+def print_results(documents_info, docs_clusters):
+    for pair in zip(documents_info, docs_clusters):
+        print("{},{}".format(pair[1], ",".join(pair[0])))
 
 
-def print_results(documents_info, wts):
-    for pair in zip(documents_info, wts):
-        print_doc_result(pair[0], pair[1])
+def calc_confusion_matrix(docs_categories, docs_clusters, cat2idx):
+    result = np.zeros([9, 10])
+    for i, doc_cluster in enumerate(docs_clusters):
+        doc_categories = docs_categories[i]
+        for cat in doc_categories:
+            cat_idx = cat2idx[cat]
+            result[doc_cluster][cat_idx] = result[doc_cluster][cat_idx] + 1
+            result[doc_cluster][9] = result[doc_cluster][9] + 1
+    return result
+
+
+def print_confusion_matrix(confusion_matrix):
+    print(confusion_matrix)
 
 
 if __name__ == "__main__":
+    cat2idx = load_topics("dataset/topics.txt")
     documents_info, vocab, dataset_word_count = load_input("dataset/develop.txt")
     documents = [x[1] for x in documents_info]
 
@@ -137,7 +154,7 @@ if __name__ == "__main__":
     wts = [EYE[t % 9] for t in range(len(documents))]
 
     vocab_size = len(vocab)
-    for i in range(30):
+    for i in range(15):
         start_time = time()
 
         clusters_probabilities, words_clusters_probabilities = m_step(wts, documents, vocab, vocab_size)
@@ -148,4 +165,9 @@ if __name__ == "__main__":
         iteration_runtime_seconds = str((time() - start_time))
         print("{}\t{}\t{}\t{}".format(i, log_likelyhood, perplexity, iteration_runtime_seconds))
 
-    print_results(documents_info, wts)
+    docs_clusters = [np.argmax(wti) for wti in wts]
+    docs_categories = [p[0] for p in documents_info]
+    print_results(docs_categories, docs_clusters)
+
+    confusion_matrix = calc_confusion_matrix(docs_categories, docs_clusters, cat2idx)
+    print_confusion_matrix(confusion_matrix)
