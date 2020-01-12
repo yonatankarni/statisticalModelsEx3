@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 from time import time
 import numpy as np
@@ -80,7 +81,7 @@ def m_step(wts, documents, vocab, vocab_size):
     return smoothed_clusters_probabilities, words_clusters_probabilities
 
 
-def log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities):
+def calc_log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities):
     zits = [calc_zis(yt, clusters_probabilities, words_clusters_probabilities) for yt in documents]
     return sum([zit[1] + np.log(calc_sum_of_e_power_of_zi(zit[0], zit[1])) for zit in zits])
 
@@ -91,17 +92,39 @@ def load_input(input_filename):
 
     vocab_counter = Counter([word for line in lines[1::2] for word in line.strip().split(" ")])
     vocab = set(map(lambda p: p[0], filter(lambda x: x[1] > 3, vocab_counter.most_common())))
-
+    dataset_word_count = sum(map(lambda p: p[1], filter(lambda x: x[1] > 3, vocab_counter.most_common())))
     documents_after_filtering = [Counter(list(filter(lambda w: w in vocab, line.strip().split(" ")))) for line in lines[1::2]]
 
     document_info = lines[0::2]
     documents_info = list(zip(document_info, documents_after_filtering))
 
-    return documents_info, vocab
+    return documents_info, vocab, dataset_word_count
+
+
+pattern = re.compile(r'<TRAIN\s+(\d+)\s+((\w+-?\w+?\s*)+)>')
+
+
+def get_document_topics(header):
+    m = pattern.match(header)
+    if m:
+        return m.group(2).split()
+    else:
+        raise ValueError(header)
+
+
+def print_doc_result(document_info, wti):
+    document_topics = get_document_topics(document_info[0])
+    document_main_cluster = np.argmax(wti)
+    print("{},{}".format(document_main_cluster, ",".join(document_topics)))
+
+
+def print_results(documents_info, wts):
+    for pair in zip(documents_info, wts):
+        print_doc_result(pair[0], pair[1])
 
 
 if __name__ == "__main__":
-    documents_info, vocab = load_input("dataset/develop.txt")
+    documents_info, vocab, dataset_word_count = load_input("dataset/develop.txt")
     documents = list(map(lambda x: x[1], documents_info))
 
     # initialize - fake e step where each document gets a cluster by calculating the document index modulo 9
@@ -109,11 +132,15 @@ if __name__ == "__main__":
     wts = [EYE[t % 9] for t in range(len(documents))]
 
     vocab_size = len(vocab)
-    for i in range(10):
+    for i in range(30):
         start_time = time()
 
         clusters_probabilities, words_clusters_probabilities = m_step(wts, documents, vocab, vocab_size)
         wts = e_step(documents, clusters_probabilities, words_clusters_probabilities)
 
-        print(log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities))
-        print("took " + str((time() - start_time)) + " seconds")
+        log_likelyhood = calc_log_likelyhood(documents, clusters_probabilities, words_clusters_probabilities)
+        perplexity = np.power(np.e, (-1/float(dataset_word_count))*log_likelyhood)
+        iteration_runtime_seconds = str((time() - start_time))
+        print("{}\t{}\t{}\t{}".format(i, log_likelyhood, perplexity, iteration_runtime_seconds))
+
+    print_results(documents_info, wts)
