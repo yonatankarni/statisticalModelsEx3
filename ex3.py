@@ -1,4 +1,3 @@
-import re
 from collections import Counter
 from time import time
 import numpy as np
@@ -90,9 +89,14 @@ def get_vocabulary_words_in_line_counter(line, vocab):
     return Counter([w for w in line.strip().split(" ") if w in vocab])
 
 
-def load_topics(topics_filename):
+def read_file_lines(topics_filename):
     with open(topics_filename, 'r') as topics_file:
-        lines = topics_file.readlines()
+        lines = [line.rstrip('\n') for line in topics_file if line.rstrip('\n') is not '']
+    return lines
+
+
+def load_topics(topics_filename):
+    lines = read_file_lines(topics_filename)
 
     result = dict()
     for idx, topic in enumerate(lines):
@@ -102,9 +106,7 @@ def load_topics(topics_filename):
 
 
 def load_input(input_filename):
-    with open(input_filename, 'r') as development_set_file:
-        lines = development_set_file.readlines()
-
+    lines = read_file_lines(input_filename)
     vocab_counter = Counter([word for line in lines[1::2] for word in line.strip().split(" ")])
     vocab = set([p[0] for p in vocab_counter.most_common() if p[1] > 3])
     dataset_word_count = sum([p[1] for p in vocab_counter.most_common() if p[1] > 3])
@@ -115,11 +117,8 @@ def load_input(input_filename):
     return documents_info, vocab, dataset_word_count
 
 
-pattern = re.compile(r'<TRAIN\s+(\d+)\s+((\w+-?\w+?\s*)+)>')
-
-
 def get_document_topics(header):
-    return pattern.match(header).group(2).split()
+    return header.strip().rstrip(">").split()[2:]
 
 
 def print_results(documents_info, docs_clusters):
