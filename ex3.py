@@ -153,7 +153,7 @@ if __name__ == "__main__":
     wts = [EYE[t % 9] for t in range(len(documents))]
 
     vocab_size = len(vocab)
-    for i in range(15):
+    for i in range(30):
         start_time = time()
 
         clusters_probabilities, words_clusters_probabilities = m_step(wts, documents, vocab, vocab_size)
